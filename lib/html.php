@@ -14,6 +14,17 @@
 class Html {
 
   /**
+   * Can be used to switch to trailing slashes if required
+   * 
+   * ```php
+   * html::$void = ' />'
+   * ```
+   * 
+   * @var string $void
+   */
+  public static $void = '>';
+
+  /**
    * An internal store for a html entities translation table
    *
    * @return array
@@ -159,7 +170,7 @@ class Html {
     if(!empty($attr)) $html .= ' ' . $attr;
 
     if(static::isVoid($name)) {
-      $html .= '>';
+      $html .= static::$void;
     } else {
       $html .= '>' . $content . '</' . $name . '>';
     }
@@ -185,11 +196,22 @@ class Html {
       return implode(' ', $attributes);
     }
 
-    if(empty($value) && $value !== '0' && $value !== 0) {
+    if($value === null || $value === '' || $value === []) {
       return false;
+    } else if($value === ' ') {
+      return strtolower($name) . '=""';      
     } else if(is_bool($value)) {
       return $value === true ? strtolower($name) : '';
     } else {
+      if(is_array($value)) {
+        if(isset($value['value']) && isset($value['escape'])) {
+          $value = $value['escape'] === true ? htmlspecialchars($value['value']) : $value['value'];
+        } else {
+          $value = implode(' ', $value);
+        }
+      } else {
+        $value = htmlspecialchars($value);
+      }
       return strtolower($name) . '="' . $value . '"';      
     }
 
@@ -206,6 +228,10 @@ class Html {
   public static function a($href, $text = null, $attr = array()) {
     $attr = array_merge(array('href' => $href), $attr);
     if(empty($text)) $text = $href;
+    // add rel=noopener to target blank links to improve security
+    if(a::get($attr, 'target') === '_blank' && empty($attr['rel'])) {
+      $attr['rel'] = 'noopener noreferrer';
+    }
     return static::tag('a', $text, $attr);
   }
 
@@ -218,9 +244,17 @@ class Html {
    * @return string the generated html
    */
   public static function email($email, $text = null, $attr = array()) {
+    if(empty($text)) {
+      // show only the eMail address without additional parameters (if the 'text' argument is empty)
+      $text = str::encode(a::first(str::split($email, '?'))); 
+    }
     $email = str::encode($email);
-    $attr  = array_merge(array('href' => 'mailto:' . $email), $attr);
-    if(empty($text)) $text = $email;
+    $attr  = array_merge([
+      'href' => [
+        'value'  => 'mailto:' . $email,
+        'escape' => false
+      ]
+    ], $attr);
     return static::tag('a', $text, $attr);
   }
 

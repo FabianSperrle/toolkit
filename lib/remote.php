@@ -24,6 +24,7 @@ class Remote {
     'encoding' => 'utf-8',
     'agent'    => null,
     'body'     => true,
+    'progress' => null,
   );
 
   // store for the response object
@@ -66,18 +67,24 @@ class Remote {
 
     // curl options
     $params = array(
-      CURLOPT_URL             => $this->options['url'],
-      CURLOPT_ENCODING        => $this->options['encoding'],
-      CURLOPT_CONNECTTIMEOUT  => $this->options['timeout'],
-      CURLOPT_TIMEOUT         => $this->options['timeout'],
-      CURLOPT_AUTOREFERER     => true,
-      CURLOPT_RETURNTRANSFER  => $this->options['body'],
-      CURLOPT_FOLLOWLOCATION  => true,
-      CURLOPT_MAXREDIRS       => 10,
-      CURLOPT_SSL_VERIFYPEER  => false,
-      CURLOPT_HEADER          => false,
-      CURLOPT_HEADERFUNCTION  => array($this, 'header'),
+      CURLOPT_URL              => $this->options['url'],
+      CURLOPT_ENCODING         => $this->options['encoding'],
+      CURLOPT_CONNECTTIMEOUT   => $this->options['timeout'],
+      CURLOPT_TIMEOUT          => $this->options['timeout'],
+      CURLOPT_AUTOREFERER      => true,
+      CURLOPT_RETURNTRANSFER   => $this->options['body'],
+      CURLOPT_FOLLOWLOCATION   => true,
+      CURLOPT_MAXREDIRS        => 10,
+      CURLOPT_SSL_VERIFYPEER   => false,
+      CURLOPT_HEADER           => false,
+      CURLOPT_HEADERFUNCTION   => array($this, 'header')
     );
+
+    // add the progress 
+    if(is_callable($this->options['progress'])) {
+      $params[CURLOPT_NOPROGRESS]       = false;
+      $params[CURLOPT_PROGRESSFUNCTION] = $this->options['progress'];
+    }
 
     // add all headers
     if(!empty($this->options['headers'])) $params[CURLOPT_HTTPHEADER] = $this->options['headers'];
@@ -102,6 +109,10 @@ class Remote {
           $params[CURLOPT_INFILESIZE] = f::size($this->options['file']);
         }
 
+        break;
+      case 'patch':
+        $params[CURLOPT_CUSTOMREQUEST] = 'PATCH';
+        $params[CURLOPT_POSTFIELDS]    = $this->postfields($this->options['data']);
         break;
       case 'delete':
         $params[CURLOPT_CUSTOMREQUEST] = 'DELETE';
@@ -147,7 +158,8 @@ class Remote {
     $parts = str::split($header, ':');
 
     if(!empty($parts[0]) && !empty($parts[1])) {
-      $this->headers[$parts[0]] = $parts[1];
+      $key = array_shift($parts);
+      $this->headers[$key] = implode(':', $parts);
     }
 
     return strlen($header);
@@ -244,6 +256,24 @@ class Remote {
 
     $defaults = array(
       'method' => 'PUT'
+    );
+
+    $request = new self($url, array_merge($defaults, $params));
+    return $request->response();
+
+  }
+
+  /**
+   * Static method to send a PATCH request
+   *
+   * @param string $url
+   * @param array $params
+   * @return object Response
+   */
+  public static function patch($url, $params = array()) {
+
+    $defaults = array(
+      'method' => 'PATCH'
     );
 
     $request = new self($url, array_merge($defaults, $params));

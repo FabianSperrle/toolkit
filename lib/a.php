@@ -329,18 +329,17 @@ class A {
    *
    * <code>
    *
-   * $array = array(
+   * $array = [
    *   'cat' => 'miao',
    *   'dog' => 'wuff',
-   *   'bird' => 'tweet'
-   * );
+   *   'bird' => 'tweet',
+   *   'hippo' => null
+   * ];
    *
-   * $required = array('cat', 'elephant');
+   * $required = ['cat', 'elephant', 'hippo'];
    *
-   * $missng = a::missing($array, $required);
-   * // missing: array(
-   * //    'elephant'
-   * // );
+   * $missing = a::missing($array, $required);
+   * // missing: ['elephant', 'hippo'];
    *
    * </code>
    *
@@ -348,10 +347,10 @@ class A {
    * @param   array  $required An array of required keys
    * @return  array  An array of missing fields. If this is empty, nothing is missing.
    */
-  public static function missing($array, $required=array()) {
-    $missing = array();
-    foreach($required AS $r) {
-      if(empty($array[$r])) $missing[] = $r;
+  public static function missing($array, $required = []) {
+    $missing = [];
+    foreach($required as $r) {
+      if(!isset($array[$r])) $missing[] = $r;
     }
     return $missing;
   }
@@ -448,7 +447,7 @@ class A {
    * @return  int    The average value
    */
   public static function average($array, $decimals = 0) {
-    return round(array_sum($array), $decimals) / sizeof($array);
+    return round((array_sum($array) / sizeof($array)), $decimals);
   }
 
   /**
@@ -468,6 +467,28 @@ class A {
       }
     }
     return $merged;
+  }
+
+  /**
+   * Update an array with a second array
+   * The second array can contain callbacks as values, 
+   * which will get the original values as argument
+   * 
+   * @param array $array
+   * @param array $update
+   */
+  public static function update($array, $update) {
+
+    foreach($update as $key => $value) {
+      if(is_a($value, 'Closure')) {
+        $array[$key] = call($value, static::get($array, $key));
+      } else {
+        $array[$key] = $value;
+      }
+    }
+
+    return $array;
+
   }
 
 }

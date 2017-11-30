@@ -61,6 +61,7 @@ class F {
     'mpga'  => 'audio/mpeg',
     'mp2'   => 'audio/mpeg',
     'mp3'   => array('audio/mpeg', 'audio/mpg', 'audio/mpeg3', 'audio/mp3'),
+    'm4a'   => 'audio/mp4',    
     'aif'   => 'audio/x-aiff',
     'aiff'  => 'audio/x-aiff',
     'aifc'  => 'audio/x-aiff',
@@ -88,12 +89,15 @@ class F {
     'text'  => 'text/plain',
     'log'   => array('text/plain', 'text/x-log'),
     'rtx'   => 'text/richtext',
+    'ics'   => 'text/calendar',
     'rtf'   => 'text/rtf',
     'xml'   => 'text/xml',
     'xsl'   => 'text/xml',
     'mpeg'  => 'video/mpeg',
     'mpg'   => 'video/mpeg',
     'mpe'   => 'video/mpeg',
+    'mp4'   => 'video/mp4',
+    'm4v'   => 'video/mp4',
     'qt'    => 'video/quicktime',
     'mov'   => 'video/quicktime',
     'avi'   => 'video/x-msvideo',
@@ -114,6 +118,7 @@ class F {
     'odt'   => 'application/vnd.oasis.opendocument.text',
     'odc'   => 'application/vnd.oasis.opendocument.chart',
     'odp'   => 'application/vnd.oasis.opendocument.presentation',
+    'webm'  => 'video/webm'
   );
 
   public static $types = array(
@@ -198,7 +203,7 @@ class F {
       'flv',
       'swf',
       'mp4',
-      'mv4',
+      'm4v',
       'mpg',
       'mpe'
     ),
@@ -515,7 +520,99 @@ class F {
    * @return int
    */
   public static function modified($file, $format = null, $handler = 'date') {
-    return !is_null($format) ? $handler($format, filemtime($file)) : filemtime($file);
+    if(file_exists($file)) {
+      return !is_null($format) ? $handler($format, filemtime($file)) : filemtime($file);      
+    } else {
+      return false;
+    }
+  }
+
+  /**
+   * Returns the mime type of a file
+   *
+   * @param string $file
+   * @return string|false
+   */
+  public static function mimeFromFileInfo($file) {
+
+    if(function_exists('finfo_file') && file_exists($file)) {
+      $finfo = finfo_open(FILEINFO_MIME_TYPE);
+      $mime  = finfo_file($finfo, $file);
+      finfo_close($finfo);
+      return $mime;
+    } else {
+      return false;
+    }
+
+  }
+
+  /**
+   * Returns the mime type of a file
+   *
+   * @param string $file
+   * @return string|false
+   */
+  public static function mimeFromMimeContentType($file) {
+
+    if(function_exists('mime_content_type') && file_exists($file) && $mime = @mime_content_type($file) !== false) {
+      return $mime;
+    } else {
+      return false;
+    }
+
+  }
+
+  /**
+   * Returns the mime type of a file
+   *
+   * @param string $file
+   * @return string|false
+   */
+  public static function mimeFromSystem($file) {
+
+    try {
+
+      if(!file_exists($file)) {
+        throw new Exception('The file does not exist');
+      }
+
+      $mime = system::execute('file', [$file, '-z', '-b', '--mime'], 'output');  
+      $mime = trim(str::split($mime, ';')[0]);
+
+      if(!static::mimeToExtension($mime)) {
+        throw new Exception('Unknown mime type');  
+      } 
+
+      return $mime;
+
+    } catch(Exception $e) {
+      // no mime type detectable with shell  
+      return false;
+    }
+
+  }
+
+  /**
+   * Returns the mime type of a file
+   *
+   * @param string $file
+   * @return string|false
+   */
+  public static function mimeFromSniffer($file) {
+
+    if(file_exists($file)) {
+
+      $reader = new MimeReader($file);
+      $mime   = $reader->get_type();
+
+      if(!empty($mime) && static::mimeToExtension($mime)) {
+        return $mime;
+      }
+
+    } 
+
+    return false;
+
   }
 
   /**
@@ -526,42 +623,43 @@ class F {
    */
   public static function mime($file) {
 
-    // stop for invalid files
-    if(!file_exists($file)) return null;
+    // use the standard finfo extension 
+    $mime = static::mimeFromFileInfo($file);
 
-    // Fileinfo is prefered if available
-    if(function_exists('finfo_file')) {
-      $finfo = finfo_open(FILEINFO_MIME_TYPE);
-      $mime  = finfo_file($finfo, $file);
-      finfo_close($finfo);
-      return $mime;
+    // use the mime_content_type function
+    if(!$mime) {
+      $mime = static::mimeFromMimeContentType($file);
     }
 
-    // for older versions with mime_content_type go for that.
-    if(function_exists('mime_content_type') && $mime = @mime_content_type($file) !== false) {
-      return $mime;
+    // try to get it via cli
+    if(!$mime) {
+      $mime = static::mimeFromSystem($file);
     }
 
-    // shell check
-    try {
-      $mime = system::execute('file', [$file, '-z', '-b', '--mime'], 'output');  
-      $mime = trim(str::split($mime, ';')[0]);
-      if(f::mimeToExtension($mime)) return $mime;
-    } catch(Exception $e) {
-      // no mime type detectable with shell  
-      $mime = null;
+    // use the mime sniffer class
+    if(!$mime) {
+      $mime = static::mimeFromSniffer($file);
     }
 
-    // Mime Sniffing
-    $reader = new MimeReader($file);
-    $mime   = $reader->get_type();
-
-    if(!empty($mime) && f::mimeToExtension($mime)) {
-      return $mime;
+    // try to guess the mime type at least
+    if(!$mime) {
+      $mime = static::extensionToMime(static::extension($file));      
     }
 
-    // guess the matching mime type by extension
-    return f::extensionToMime(f::extension($file));
+    // fix broken mime detection for svg files with style attribute
+    if($mime === 'text/html' && static::extension($file) === 'svg') {
+
+      libxml_use_internal_errors(true);
+      
+      $svg = new SimpleXMLElement(static::read($file));
+
+      if($svg !== false && $svg->getName() === 'svg') {
+        return 'image/svg+xml';
+      }
+
+    } 
+
+    return $mime;
 
   }
 
@@ -785,6 +883,31 @@ class F {
       if(file_exists($file)) return $file;
     }
     return false;
+  }
+
+  /**
+   * Unzips a zip file 
+   * 
+   * @param string $file
+   * @param string $to
+   * @return boolean
+   */
+  public static function unzip($file, $to) {
+
+    if(!class_exists('ZipArchive')) {
+      throw new Exception('The ZipArchive class is not available');
+    }
+
+    $zip = new ZipArchive;
+
+    if($zip->open($file) === true) {
+      $zip->extractTo($to);
+      $zip->close();
+      return true;
+    } else {
+      return false;
+    }
+
   }
 
 }

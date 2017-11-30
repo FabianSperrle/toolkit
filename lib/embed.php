@@ -23,9 +23,16 @@ class Embed {
    */
   public static function youtube($url, $attr = array()) {
 
+    // youtube embed domain
+    $domain = 'youtube.com';
+
     // http://www.youtube.com/embed/d9NF2edxy-M
     if(preg_match('!youtube.com\/embed\/([a-z0-9_-]+)!i', $url, $array)) {
       $id = $array[1];
+    // https://www.youtube-nocookie.com/embed/d9NF2edxy-M
+    } else if(preg_match('!youtube-nocookie.com\/embed\/([a-z0-9_-]+)!i', $url, $array)) {
+      $id     = $array[1];
+      $domain = 'www.youtube-nocookie.com';
     // http://www.youtube.com/watch?feature=player_embedded&v=d9NF2edxy-M#!
     } elseif(preg_match('!v=([a-z0-9_-]+)!i', $url, $array)) {
       $id = $array[1];
@@ -37,9 +44,18 @@ class Embed {
     // no id no result!
     if(empty($id)) return false;
 
+    // default options
+    if(!empty($attr['options'])) {
+      $options = '?' . http_build_query($attr['options']);      
+      // options should not propagate to the attr list
+      unset($attr['options']);
+    } else {
+      $options = '';
+    }
+
     // default attributes
     $attr = array_merge(array(
-      'src'                   => '//youtube.com/embed/' . $id,
+      'src'                   => '//' . $domain . '/embed/' . $id . $options,
       'frameborder'           => '0',
       'webkitAllowFullScreen' => 'true',
       'mozAllowFullScreen'    => 'true',
@@ -71,9 +87,18 @@ class Embed {
     // no id no result!
     if(empty($id)) return false;
 
+    // default options
+    if(!empty($attr['options'])) {
+      $options = '?' . http_build_query($attr['options']);      
+      // options should not propagate to the attr list
+      unset($attr['options']);
+    } else {
+      $options = '';
+    }
+
     // default attributes
     $attr = array_merge(array(
-      'src'                   => '//player.vimeo.com/video/' . $id,
+      'src'                   => '//player.vimeo.com/video/' . $id . $options,
       'frameborder'           => '0',
       'webkitAllowFullScreen' => 'true',
       'mozAllowFullScreen'    => 'true',

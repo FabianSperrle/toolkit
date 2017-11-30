@@ -34,7 +34,7 @@ class Router {
 
   // The wildcard patterns supported by the router.
   protected $patterns = array(
-    '(:num)'     => '([0-9]+)',
+    '(:num)'     => '(-?[0-9]+)',
     '(:alpha)'   => '([a-zA-Z]+)',
     '(:any)'     => '([a-zA-Z0-9\.\-_%=]+)',
     '(:all)'     => '(.*)',
@@ -88,9 +88,13 @@ class Router {
    */
   public function register($pattern, $params = array(), $optional = array()) {
 
-    if(is_array($pattern)) {
+    if($pattern === false) {
+      return false;
+    } else if(is_array($pattern)) {
       foreach($pattern as $v) {
-        if(is_array($v['pattern'])) {
+        if($v === false || empty($v['pattern'])) {
+          continue;
+        } else if(is_array($v['pattern'])) {
           foreach($v['pattern'] as $p) {
             $v['pattern'] = $p;
             $this->register($p, $v);
@@ -104,6 +108,7 @@ class Router {
 
     $defaults = array(
       'pattern'   => $pattern,
+      'host'      => false,
       'https'     => false,
       'ajax'      => false,
       'filter'    => null,
@@ -132,10 +137,12 @@ class Router {
       } else {
         $route->filter = array($route->filter);
       }
+    } else if(is_object($route->filter) && ($route->filter instanceof Closure)) {
+      $route->filter = array($route->filter);
     }
 
     foreach($route->method as $method) {
-      $this->routes[strtoupper($method)][$route->pattern] = $route;
+      $this->routes[strtoupper($method)][$route->host . $route->pattern] = $route;
     }
 
     return $route;
@@ -165,13 +172,26 @@ class Router {
    * Call all matching filters
    *
    * @param mixed $filters
+   * @return boolean
    */
-  protected function filterer($filters) {
+  protected function filterer($filters, $route) {
     foreach((array)$filters as $filter) {
-      if(array_key_exists($filter, $this->filters) && is_callable($this->filters[$filter])) {
-        call_user_func($this->filters[$filter]);
+      // fetch the filter function
+      $function = null;
+      if(is_object($filter) && ($filter instanceof Closure)) {
+        $function = $filter;
+      } else if(array_key_exists($filter, $this->filters) && is_callable($this->filters[$filter])) {
+        $function = $this->filters[$filter];
+      }
+
+      // if we found one, call it and expect a boolean result
+      if($function) {
+        $return = call($function, $route);
+        if($return === false) return false;
       }
     }
+    
+    return true;
   }
 
   /**
@@ -188,30 +208,37 @@ class Router {
    * Iterate through every route to find a matching route.
    *
    * @param  string $path Optional path to match against
+   * @param  string $host Optional host to match against
    * @return Route
    */
-  public function run($path = null) {
+  public function run($path = null, $host = null) {
 
     $method = r::method();
     $ajax   = r::ajax();
     $https  = r::ssl();
     $routes = a::get($this->routes, $method, array());
 
-    // detect path if not set manually
+    // detect path and host if not set manually
     if($path === null) $path = implode('/', (array)url::fragments(detect::path()));
+    if($host === null) $host = url::host();
 
     // empty urls should never happen
     if(empty($path)) $path = '/';
 
     foreach($routes as $route) {
 
+      if($route->host  && $route->host !== $host) continue;
       if($route->https && !$https) continue;
       if($route->ajax  && !$ajax)  continue;
 
       // handle exact matches
       if($route->pattern == $path) {
-        $this->route = $route;
-        break;
+        // Run the filters
+        // If the route passes all filters, we choose it;
+        // otherwise the search continues
+        if($this->filterer($route->filter, $route) !== false) {
+          return $this->route = $route;
+        }
       }
 
       // We only need to check routes with regular expression since all others
@@ -225,18 +252,20 @@ class Router {
       // parameter match, as preg_match sets the first array item to the
       // full-text match of the pattern.
       if(preg_match($preg, $path, $parameters)) {
-        $this->route = $route;
-        $this->route->arguments = array_slice($parameters, 1);
-        break;
+        $route->arguments = array_slice($parameters, 1);
+
+        // Run the filters
+        // If the route passes all filters, we choose it;
+        // otherwise the search continues
+        if($this->filterer($route->filter, $route) !== false) {
+          return $this->route = $route;
+        }
       }
 
     }
 
-    if($this->route && $this->filterer($this->route->filter) !== false) {
-      return $this->route;
-    } else {
-      return null;
-    }
+    // We didn't find any route :(
+    return null;
 
   }
 

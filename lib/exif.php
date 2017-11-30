@@ -206,8 +206,8 @@ class Exif {
   public function toArray() {
 
     return array(
-      'camera'      => $this->camera()->toArray(),
-      'location'    => $this->location()->toArray(),
+      'camera'      => $this->camera() ? $this->camera()->toArray() : null,
+      'location'    => $this->location() ? $this->location()->toArray() : null,
       'timestamp'   => $this->timestamp(),
       'exposure'    => $this->exposure(),
       'aperture'    => $this->aperture(),
@@ -216,6 +216,18 @@ class Exif {
       'isColor'     => $this->isColor()
     );
 
+  }
+
+  /**
+   * Improved var_dump() output
+   * 
+   * @return array
+   */
+  public function __debuginfo() {
+    return array_merge($this->toArray(), [
+      'camera'   => $this->camera(),
+      'location' => $this->location()
+    ]);    
   }
 
 }

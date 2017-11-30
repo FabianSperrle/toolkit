@@ -23,7 +23,8 @@ class Url {
         (isset($_SERVER['HTTPS']) && !empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) != 'off') ||
         server::get('SERVER_PORT')            == '443' || 
         server::get('HTTP_X_FORWARDED_PORT')  == '443' || 
-        server::get('HTTP_X_FORWARDED_PROTO') == 'https'
+        server::get('HTTP_X_FORWARDED_PROTO') == 'https' ||
+        server::get('HTTP_X_FORWARDED_PROTO') == 'https, http'
       ) {
         return 'https';
       } else {
@@ -82,7 +83,7 @@ class Url {
     // to trick the url parser. It's a bit hacky but it works
     if(!static::isAbsolute($url)) $url = 'http://0.0.0.0/' . $url;
 
-    return trim(parse_url($url, PHP_URL_PATH), '/');
+    return ltrim(parse_url($url, PHP_URL_PATH), '/');
 
   }
 
@@ -169,9 +170,18 @@ class Url {
 
     if(!empty($parts['fragments'])) $result[] = implode('/', $parts['fragments']);
     if(!empty($parts['params']))    $result[] = static::paramsToString($parts['params']);
-    if(!empty($parts['query']))     $result[] = '?' . static::queryToString($parts['query']);
 
-    return implode('/', $result) . (!empty($parts['hash']) ? '#' . $parts['hash'] : '');
+    // make sure that URLs without any URI end with a slash after the host
+    if(count($result) === 1) {
+      $result = $result[0] . '/';
+    } else {
+      $result = implode('/', $result);
+    }
+
+    if(!empty($parts['query'])) $result .= '?' . static::queryToString($parts['query']);
+    if(!empty($parts['hash']))  $result .= '#' . $parts['hash'];
+
+    return $result;
 
   }
 
@@ -355,6 +365,48 @@ class Url {
 
     return ($length) ? str::short($url, $length, $rep) : $url;
 
+  }
+
+  /**
+   * Tries to convert a URL with an internationalized domain
+   * name to the human-readable UTF8 representation
+   * Requires the intl PHP extension
+   *
+   * @param string $url
+   * @return string
+   */
+  public static function idn($url) {
+
+    if(!function_exists('idn_to_utf8')) return $url;
+
+    // disassemble the URL, convert the domain name and reassemble
+    $variant = defined('INTL_IDNA_VARIANT_UTS46') ? INTL_IDNA_VARIANT_UTS46 : INTL_IDNA_VARIANT_2003;
+    $host = idn_to_utf8(static::host($url), 0, $variant);
+    if($host === false) return $url;
+    $url  = static::build(['host' => $host], $url);
+
+    return $url;
+
+  }
+
+  /**
+   * Tries to convert a URL with an internationalized domain
+   * name to the machine-readable Punycode representation
+   *
+   * @param string $url
+   * @return string
+   */
+  public static function unIdn($url) {
+
+    if(!function_exists('idn_to_ascii')) return $url;
+
+    // disassemble the URL, convert the domain name and reassemble
+    $variant = defined('INTL_IDNA_VARIANT_UTS46') ? INTL_IDNA_VARIANT_UTS46 : INTL_IDNA_VARIANT_2003;
+    $host = idn_to_ascii(static::host($url), 0, $variant);
+    if($host === false) return $url;
+    $url  = static::build(['host' => $host], $url);
+
+    return $url;
   }
 
   /**

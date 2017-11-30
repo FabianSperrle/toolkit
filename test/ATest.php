@@ -3,13 +3,18 @@
 require_once('lib/bootstrap.php');
 
 class ATest extends PHPUnit_Framework_TestCase {
+
+  protected $user;
+  protected $users;
   
-  public function __construct() {
+  protected function setUp() {
 
     $this->user = array(
       'username' => 'testuser',
       'password' => 'testpassword',
-      'email'    => 'test@user.com'
+      'email'    => 'test@user.com',
+      'image'    => null,
+      'logins'   => 0
     );
 
     $this->users = array();
@@ -97,11 +102,11 @@ class ATest extends PHPUnit_Framework_TestCase {
   public function testMissing() {
 
     $user = $this->user;
-    $required = array('username', 'password', 'website');
+    $required = array('username', 'password', 'website', 'image', 'logins');
 
     $missing = a::missing($user, $required);
 
-    $this->assertEquals(array('website'), $missing);
+    $this->assertEquals(array('website', 'image'), $missing);
 
   }
 
@@ -114,6 +119,40 @@ class ATest extends PHPUnit_Framework_TestCase {
 
     $this->assertEquals('mary', $first['username']);
     $this->assertEquals('peter', $last['username']);
+
+  }
+
+  public function testUpdate() {
+
+    // original data
+    $source = [
+      'a' => 'value a',
+      'b' => 'value b'
+    ];
+
+    // test with simple array
+    $result = a::update($source, [
+      'a' => 'updated value a',
+      'c' => 'new value c'
+    ]);
+
+    $this->assertEquals('updated value a', $result['a']);
+    $this->assertEquals('value b', $result['b']);
+    $this->assertEquals('new value c', $result['c']);
+
+    // test with callbacks
+    $result = a::update($source, [
+      'a' => function($value) {
+        return 'updated ' . $value;
+      },
+      'c' => function($value) {
+        return 'new value c';
+      }
+    ]);
+
+    $this->assertEquals('updated value a', $result['a']);
+    $this->assertEquals('value b', $result['b']);
+    $this->assertEquals('new value c', $result['c']);
 
   }
 
